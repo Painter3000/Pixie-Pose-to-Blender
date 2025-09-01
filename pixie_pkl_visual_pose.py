@@ -22,7 +22,7 @@ SMPLX_SIDES = [
 
 COLOR_MAP = {"left": "blue", "right": "red", "center": "green"}
 
-# === Verbindungen (Skelett) ===
+# === Verbindungen (Knochenstruktur) ===
 SMPLX_EDGES = [
     ("pelvis", "left_hip"), ("pelvis", "right_hip"), ("pelvis", "spine1"),
     ("left_hip", "left_knee"), ("right_hip", "right_knee"),
@@ -59,10 +59,13 @@ def plot_pose(joints, joint_names, joint_sides, partbody_pose=None, body_cam_pos
         # Raumrichtungspfeile (Z-Achse aus Rotationsmatrix)
         if partbody_pose is not None and i < len(partbody_pose):
             R = partbody_pose[i]
-            z_dir = R[:, 2] * 0.05  # Skalierte Z-Achse
-            ax.quiver(x, y, z, z_dir[0], z_dir[1], z_dir[2], color='gray', length=0.05, normalize=True)
+            if R.shape == (3, 3) and np.linalg.norm(R[:, 2]) > 1e-3:
+                z_dir = R[:, 2] * 0.05
+                ax.quiver(x, y, z, *z_dir, color='gray', length=0.05, normalize=True)
+            else:
+                print(f"[WARN] Keine gültige Rotation für Joint: {joint_names[i]}")
 
-    # Verbindungslinien (Knochen)
+    # Verbindungslinien (Knochenstruktur)
     name_to_index = {name: idx for idx, name in enumerate(joint_names)}
     for joint_a, joint_b in SMPLX_EDGES:
         if joint_a in name_to_index and joint_b in name_to_index:
@@ -71,13 +74,13 @@ def plot_pose(joints, joint_names, joint_sides, partbody_pose=None, body_cam_pos
             xa, ya, za = joints[idx_a]
             xb, yb, zb = joints[idx_b]
 
-            # Seitenfarbe wählen (z. B. Seite von joint_a)
+            # Farbe entsprechend der Seite von joint_a
             side = joint_sides[idx_a]
             color = COLOR_MAP.get(side, "black")
 
             ax.plot([xa, xb], [ya, yb], [za, zb], color=color, linewidth=2)
 
-    # body_cam als gelber Marker
+    # Kamera-Position als Marker
     if body_cam_pos is not None:
         ax.scatter(*body_cam_pos, c='yellow', marker='^', s=80)
         ax.text(*body_cam_pos, "body_cam", fontsize=9, color='black')
@@ -103,17 +106,17 @@ if joints_raw is None:
     raise ValueError("Keine 'smplx_kpt3d' Daten in prediction.pkl gefunden.")
 joints = joints_raw.squeeze()
 
-# Pose-Matrizen laden (optional für Pfeile)
+# Pose-Matrizen laden (optional)
 partbody_pose = param.get("partbody_pose", None)
 if partbody_pose is not None and partbody_pose.ndim == 4:
     partbody_pose = partbody_pose.squeeze(0)
 
-# body_cam anwenden
+# body_cam anwenden (Skalierung + Translation)
 body_cam_pos = None
 if "body_cam" in param:
     body_cam = param["body_cam"].squeeze()
     joints = apply_body_cam(joints, body_cam)
     body_cam_pos = np.array([body_cam[1], body_cam[2], 0.0])  # tx, ty, z=0
 
-# Plot mit Labels, Farben, Verbindungslinien & Pfeilen
+# Plot anzeigen
 plot_pose(joints[:25], SMPLX_NAMES, SMPLX_SIDES, partbody_pose=partbody_pose, body_cam_pos=body_cam_pos)
